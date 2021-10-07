@@ -70,26 +70,10 @@ def update_check(tituloarea, titulos, links, ws):
    print("Elementos desatualizados: ")
    print([des[0] for des in desatualizados])
    return desatualizados
-
-
-def table(path, tituloarea, titulos):
-   hoje = date.today().strftime("%d/%m/%Y")
-   wb = Workbook(path + "/" + "tables"+'xlsx')
-   ws = wb.active
-   switch = {'Decretos Normativos':2,'Leis Ordinárias':3}
-   col = switch.get(tituloarea)
-   ws.cell(1, col, tituloarea)
-   for row_num, titulo in enumerate(titulos):
-      # Rownum percorre as lista, enquanto increment move o começo para o ultimo elemento da lista, e o +1 para pular o ultimo elemento
-      ws.cell(row_num + 1, col, titulo)
-      print(titulo)
-   ws.cell(1, 1, "Ultima verificação: " + hoje)
-   wb.save(path + "/" + "tables")
-   
+  
 def porcentagem(valor, total):
    porcentagem = (valor/total)*100
    return int(porcentagem)
-
 
 def main(hoje):
    linkspage = []
@@ -164,52 +148,46 @@ def linksdentroareas(desatualizados, web, wb,nome):
    descdentro = []
    datapubdentro = []
 
-   for col, element in enumerate(desatualizados):     
-      increment = 0 
+   for col, element in enumerate(desatualizados):   
+      coluna = (3+(int(element[0][-2:])*3))
+      ws.cell(1,coluna+1,0) #zerando incremento para refazer elemento do 0
       web.get(element[1])
       try:
-         page = 1#int(web.find_element_by_xpath('//*[@id="ACERVO"]/ul/li[3]').text[12:])
+         page = int(web.find_element_by_xpath('//*[@id="ACERVO"]/ul/li[3]').text[12:])
       except:
          page = 1
       for pagina in range(1,page+1): 
          linkpagina = element[1][:-11]+str(pagina)+"&PARM=&LBL="
          _, titulodentro, linksdentro, descdentro, datapubdentro = get_all_links(web, linkpagina, '//*[@id="ADCON"]/div[3]','dl','ACERVO')
-         if (ws.cell(1,1).value != None):
-            for index in range(int(ws.cell(1,1).value)):
-               if(ws.cell(1,3+(index*5)).value == element[0]):  
-                  coluna = ws.cell(1,3+(index*5)).value
-                  break
-               else:
-                  coluna = 3+(col*5)
-         else:
-            coluna = 3+(col*5)
          try:
             increment = int(ws.cell(1,coluna+1).value)
          except:
             increment = 0
          ws.cell(1, coluna, element[0])
          for i, link in enumerate(linksdentro):
-            if(increment == 0):#para evitar espaço embranco entre as paginas
+            if(increment == 0):#para evitar espaço em branco entre as paginas
                space = 2
             else:
                space = 1
             linha = i + space + increment
             if(titulodentro[i][-10:].find('/') != -1):
                try:
-                  a = datetime.strptime(titulodentro[i][-10:], "%d/%m/%Y")
-                  data = datetime.strptime(a.day,a.month,a.year)
+                  data = datetime.strptime(titulodentro[i][-10:], "%d/%m/%Y")
                except:
-                  data = titulodentro[i][-11:-1]
+                  data = titulodentro[i][-10:]
             else:
                try:
-                  a = datetime.strptime(titulodentro[i][-10:], "%d.%m.%Y")
-                  data = datetime.strptime(a.day,a.month,a.year)
+                  data = datetime.strptime(titulodentro[i][-10:], "%d.%m.%Y")
                except:
-                  a = titulodentro[i][-11:-1]
+                  data = titulodentro[i][-10:]
             # Rownum percorre as lista, enquanto increment move o começo para o ultimo elemento da lista, e o +1 para pular o ultimo elemento
             indextit = titulodentro[i].find('de')
             try:
-               ws.cell(linha,coluna-2, int(titulodentro[i][:indextit].replace(nome.replace("s",''),'').replace(' ', '').replace('.', '')))
+               if nome != "Leis Complementares":
+                  rem = nome.replace('s' ,'')
+               else:
+                  rem = 'Lei Complementar'
+               ws.cell(linha,coluna-2, int(titulodentro[i][:indextit].replace(rem,'').replace(' ', '').replace('.', '')[:5])) 
             except:
                ws.cell(linha,coluna-2,titulodentro[i])
             ws.cell(linha,coluna-1, data)
