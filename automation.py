@@ -1,7 +1,6 @@
-from openpyxl.reader import excel
 from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
-import time
+import math
 from openpyxl import Workbook
 from openpyxl import load_workbook
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
@@ -47,6 +46,7 @@ def get_all_links(web, area, xpath, tagname, idtituloarea):
 
 def update_check(tituloarea, titulos, links, ws):
    desatualizados = []
+   numdesatu = []
    switch = {'Decretos Normativos':2,'Leis Complementares':3,'Leis Ordinárias':4}
    col = switch.get(tituloarea)
    ws.cell(1, col, tituloarea)
@@ -60,16 +60,17 @@ def update_check(tituloarea, titulos, links, ws):
          titulotable = None
       if(titulotable != None):
          valortable = titulotable[titulotable.find('(')+1:int(titulotable.find(')') - len(titulotable))]
-         print ("valor atual: " + str(valoratual) + " valor table: " + str(valortable))
          if (valoratual != valortable):
             desatualizados.append([titulo[:titulo.find('(')-1],links[row_num]])
             ws.cell(linha,col, titulos[row_num])
+            numdesatu.append(int(valoratual) - int(valortable))
       else:
             desatualizados.append([titulo[:titulo.find('(')-1],links[row_num]])
             ws.cell(linha,col, titulos[row_num])
+            numdesatu.append(int(valoratual))
    print("Elementos desatualizados: ")
-   print([des[0] for des in desatualizados])
-   return desatualizados
+   print('\n'.join([des[0] for des in desatualizados]))
+   return desatualizados,numdesatu
   
 def porcentagem(valor, total):
    porcentagem = (valor/total)*100
@@ -79,6 +80,7 @@ def main(hoje):
    linkspage = []
    titulospage = []
    desatualizados = []
+   numdesatu = []
    areas = {
       'Decretos Normativos': 'http://www.gabinetecivil.rn.gov.br/Conteudo.asp?TRAN=CATALG&TARG=111&ACT=&PAGE=0&PARM=&LBL=LEGISLA%C7%C3O',
       'Leis Complementares': 'http://www.gabinetecivil.rn.gov.br/Conteudo.asp?TRAN=CATALG&TARG=112&ACT=&PAGE=0&PARM=&LBL=LEGISLA%C7%C3O',
@@ -118,8 +120,14 @@ def main(hoje):
       print("----[Carregando o Portal]---- " + str(key), end="\r", flush=True)
       logging.warning(str(parse(datetime.now().isoformat(timespec='seconds'))) + ': ----[Carregando o Portal]---- ' + key)
       tituloarea, titulospage, linkspage = get_all_links(web, areas[key], '//*[@id="CATALOGO"]/li','li','0')
-      desatualizados = update_check(tituloarea, titulospage, linkspage, ws)
-      linksdentroareas(desatualizados, web, wb, key)
+      des, num = update_check(tituloarea, titulospage, linkspage, ws)
+      desatualizados.append(des)
+      if num != []:
+         numdesatu.append(num)
+      linksdentroareas(des, web, wb, key,num)
+   if numdesatu == []:
+      print("----[Todos os elementos estao atualizados]---- ")
+      logging.warning(str(parse(datetime.now().isoformat(timespec='seconds'))) + ': ----[Todos os elementos estao atualizados]----')
    wb.save(os.path.join(path, 'Resultado.xlsx'))
    web.close()
 
@@ -130,11 +138,11 @@ def criarworkpath(path):
    ws.title = 'Table'
    return wb, ws
 
-def linksdentroareas(desatualizados, web, wb,nome):
+def linksdentroareas(desatualizados, web, wb,nome,numdesatu):
    try:
       ws = wb[nome]
       dim_holder = DimensionHolder(worksheet=ws)
-      for col in range(ws.min_column, (len(desatualizados)*5) + 1):
+      for col in range(ws.min_column, ws.max_column + 1):
          dim_holder[get_column_letter(col)] = ColumnDimension(ws, min=col, max=col, width=30)
          ws.column_dimensions = dim_holder
    except:
@@ -144,112 +152,89 @@ def linksdentroareas(desatualizados, web, wb,nome):
       for col in range(ws.min_column, (len(desatualizados)*5) + 1):
          dim_holder[get_column_letter(col)] = ColumnDimension(ws, min=col, max=col, width=30)
          ws.column_dimensions = dim_holder
-   titulodentro = []
-   descdentro = []
-   datapubdentro = []
-
-   for col, element in enumerate(desatualizados):   
-      coluna = (3+(int(element[0][-2:])*3))
-      ws.cell(1,coluna+1,0) #zerando incremento para refazer elemento do 0
+   for j, element in enumerate(desatualizados):
+      titulodentro = []
+      descdentro = []
+      datapubdentro = []
+      todosdecpag = []
+      todosdescpag = []
+      todosdatpag = []
+      todoslinkpag = []
+      todospubpag = []   
       web.get(element[1])
-      try:
-         page = int(web.find_element_by_xpath('//*[@id="ACERVO"]/ul/li[3]').text[12:])
-      except:
-         page = 1
+      print('----[Atualizado]---- ' + str(porcentagem(j,len(desatualizados)))+"%          ", end="\r", flush=True)
+      if numdesatu[j]:
+         page = math.ceil((numdesatu[j]/50))
+      else:   
+         try:
+            page = int(web.find_element_by_xpath('//*[@id="ACERVO"]/ul/li[3]').text[12:])
+         except:
+            page = 1
       for pagina in range(1,page+1): 
+         print('----[Porcentagem '+ element[0] +']---- ' + str(porcentagem(pagina,page))+"%          ", end="\r", flush=True)
          linkpagina = element[1][:-11]+str(pagina)+"&PARM=&LBL="
          _, titulodentro, linksdentro, descdentro, datapubdentro = get_all_links(web, linkpagina, '//*[@id="ADCON"]/div[3]','dl','ACERVO')
-         try:
-            increment = int(ws.cell(1,coluna+1).value)
-         except:
-            increment = 0
-         ws.cell(1, coluna, element[0])
+
          for i, link in enumerate(linksdentro):
-            if(increment == 0):#para evitar espaço em branco entre as paginas
-               space = 2
-            else:
-               space = 1
-            linha = i + space + increment
-            if(titulodentro[i][-10:].find('/') != -1):
-               try:
-                  data = datetime.strptime(titulodentro[i][-10:], "%d/%m/%Y")
-               except:
-                  data = titulodentro[i][-10:]
-            else:
-               try:
-                  data = datetime.strptime(titulodentro[i][-10:], "%d.%m.%Y")
-               except:
-                  data = titulodentro[i][-10:]
-            # Rownum percorre as lista, enquanto increment move o começo para o ultimo elemento da lista, e o +1 para pular o ultimo elemento
-            indextit = titulodentro[i].find('de')
-            try:
-               if nome != "Leis Complementares":
-                  rem = nome.replace('s' ,'')
+            if i < numdesatu[j]:
+               if(titulodentro[i][-10:].find('/') != -1):
+                  try:
+                     data = datetime.strptime(titulodentro[i][-10:], "%d/%m/%Y").date()
+                  except:
+                     data = titulodentro[i][-10:]
                else:
-                  rem = 'Lei Complementar'
-               ws.cell(linha,coluna-2, int(titulodentro[i][:indextit].replace(rem,'').replace(' ', '').replace('.', '')[:5])) 
-            except:
-               ws.cell(linha,coluna-2,titulodentro[i])
-            ws.cell(linha,coluna-1, data)
-            ws.cell(linha,coluna, datapubdentro[i].split(',')[1])
-            try:
-               ws.cell(linha,coluna+1, ILLEGAL_CHARACTERS_RE.sub(r'',descdentro[i]))
-            except:
-               ws.cell(linha,coluna+1, "Vazio")
-            ws.cell(linha,coluna+2, link)
-            ws.cell(1,coluna+1, linha)
-
-
-def informacoes(links, titulo, data, web):
-   linkslei = []
-   titulolei = []
-   datalei = []
-   logging.warning(str(parse(datetime.now().isoformat(timespec='seconds'))) + ': ----[Procurando por Ocorrencias]----')
-   for i in range(len(links)):
-      print("----[Procurando por Ocorrencias]---- " + str(porcentagem(i,len(links))) + "%" + " das paginas                                         ", end="\r", flush=True)
-      web.get(links[i])
-      time.sleep(2)
-      conteud = web.find_elements_by_class_name("WordSection1")
-      for element in conteud:
-         if ((element.text.find("14.133")) != -1) or ((element.text.find("14133")) != -1):
-            linkslei.append(links[i])
-            titulolei.append(titulo[i])
-            datalei.append(data[i])
-   web.close()
-   return linkslei, titulolei, datalei
-
-
-def repetido(elementos, comparar):
-   index = 0
-   for i in range(len(elementos)):
-      if elementos[i] == comparar:
-         index = i+1
-   return index
-def datainicio(name):
-   datapadrao = "01/04/2021"
-   if (os.getcwd().find("WINDOWS") != -1) :
-      cwd = os.path.split(os.getcwd())
-      path = os.path.join(cwd[0].replace("WINDOWS",'Automation'), "resultado")
-   else :
-      cwd = os.getcwd()
-      path = os.path.join(cwd, "resultado")
-      if os.path.exists(path):
-         if os.path.isfile(os.path.join(path, name)):
-            wb = load_workbook(filename= path + "/" + name)
-            ws = wb.active
-            if ws.cell(1, 5).value:
-               return str(ws.cell(1, 5).value)
+                  try:
+                     data = datetime.strptime(titulodentro[i][-10:], "%d.%m.%Y").date()
+                  except:
+                     data = titulodentro[i][-10:]
+               # Rownum percorre as lista, enquanto increment move o começo para o ultimo elemento da lista, e o +1 para pular o ultimo elemento
+               indextit = titulodentro[i].find('de')
+               try:
+                  if nome != "Leis Complementares":
+                     rem = nome.replace('s' ,'')
+                  else:
+                     rem = 'Lei Complementar'
+                  todosdecpag.append(int(titulodentro[i][:indextit].replace(rem,'').replace(' ', '').replace('.', '')[:5])) 
+               except:
+                  todosdecpag.append(titulodentro[i])
+               todosdatpag.append(data)
+               todospubpag.append(datapubdentro[i].split(',')[1])
+               try:
+                  todosdescpag.append(ILLEGAL_CHARACTERS_RE.sub(r'',descdentro[i]))
+               except:
+                  todosdescpag.append("Vazio")
+               todoslinkpag.append(link)
             else:
-               return datapadrao
-         else:
-            return datapadrao
-      else:
-         return datapadrao
+               break
+      gerarxls(todosdecpag,todosdatpag,todospubpag,todosdescpag,todoslinkpag, element[0], ws)  
 
+def gerarxls(todosdecpag,todosdatpag,todospubpag,todosdescpag,todoslinkpag, titulo,ws):
+   increment = 0
+   if(titulo.find("Leis Complementares") != -1):
+      val= (int(titulo[-4:])-2000)+29
+   else:
+      val = (int(titulo[-4:])-2000)
+   coluna = (3+(val*5))
+   try:
+      increment = int(ws.cell(1,coluna+1).value)
+   except:
+      increment = 0
+   ws.cell(1,coluna,titulo)
+   for i in reversed(range(len(todosdecpag))):
+      if increment == 0:
+         space = 2
+      else:
+         space = 1
+      linha = (len(todosdecpag)-1)-i + space + increment
+      ws.cell(linha,coluna-2,todosdecpag[i])
+      ws.cell(linha,coluna-1,todosdatpag[i])
+      ws.cell(linha,coluna,todospubpag[i])
+      ws.cell(linha,coluna+1,todosdescpag[i])
+      ws.cell(linha,coluna+2,todoslinkpag[i])
+      ws.cell(1,coluna+1, linha)
 
 if __name__ == '__main__':
    hoje = date.today().strftime("%d/%m/%Y")
-   main(hoje)
    if (os.getcwd().find("WINDOWS") != -1) :
       cwd = os.path.split(os.getcwd())
       path = os.path.join(cwd[0].replace("WINDOWS","Automation"), "logs")
@@ -264,7 +249,8 @@ if __name__ == '__main__':
    else :
       os.mkdir(path)
       logging.basicConfig(filename= path + '/Log ' + date.today().strftime("%d-%m-%Y") + '.log', level=logging.WARNING)
-   print("----[Concluido!]----")
+   main(hoje)
+   print("----[Concluido!]----                                         ")
    logging.warning(str(parse(datetime.now().isoformat(timespec='seconds'))) + ': ----[Concluido!]----')
 
 # usar regex caso queira salvar o texto de um jeito diferente
