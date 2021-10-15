@@ -3,7 +3,7 @@ from cx_Freeze import setup, Executable
 base = None
 
 
-executables = [Executable("automation.py",
+executables = [Executable("automationcol.py",
                base=base,
                icon="img/icon.ico",
                targetName="Automation"
@@ -15,16 +15,16 @@ options = {
     'build_exe': {    
         'packages':packages,
         'include_files': ['img/'],
-        'includes': ["selenium", "webdriver_manager.chrome", "time", "xlsxwriter", "openpyxl", "datetime"],
+        'includes': ["selenium", "webdriver_manager.chrome", "math","openpyxl", "datetime"],
         'build_exe': 'Automation',
         'excludes': ['tkinter', 'ctypes', 'html', 'pydoc_data', 'test', 'xmlrpc'] #otimizando script
     },
 }
 
 setup(
-    name = "AutomaçãoDO",
+    name = "AutomaçãoGA",
     options = options,
     version = "1.0",
-    description = 'Script que busca por documentos que possuam uma substring.',
+    description = 'Faz um banco com os links e algumas info de todos os elementos do site.',
     executables = executables
 )

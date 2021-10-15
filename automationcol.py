@@ -69,8 +69,9 @@ def update_check(tituloarea, titulos, links, ws):
             ws.cell(linha,col, titulos[row_num])
             numdesatu.append(int(valoratual))
    print("Elementos desatualizados: ")
-   print('\n'.join([des[0] for des in desatualizados]))
-   return desatualizados,numdesatu
+   print('\n'.join([des[0]+" "+str(numdesatu[i])+ " itens desatualizados." for i ,des in enumerate(desatualizados)]))
+   logging.warning('\n'.join([des[0]+" "+str(numdesatu[i])+ " itens desatualizados." for i ,des in enumerate(desatualizados)]))
+   return desatualizados,numdesatu, titulotable #para saber se ja existe ou nao
   
 def porcentagem(valor, total):
    porcentagem = (valor/total)*100
@@ -120,11 +121,11 @@ def main(hoje):
       print("----[Carregando o Portal]---- " + str(key), end="\r", flush=True)
       logging.warning(str(parse(datetime.now().isoformat(timespec='seconds'))) + ': ----[Carregando o Portal]---- ' + key)
       tituloarea, titulospage, linkspage = get_all_links(web, areas[key], '//*[@id="CATALOGO"]/li','li','0')
-      des, num = update_check(tituloarea, titulospage, linkspage, ws)
+      des, num, tit = update_check(tituloarea, titulospage, linkspage, ws)
       desatualizados.append(des)
       if num != []:
          numdesatu.append(num)
-      linksdentroareas(des, web, wb, key,num)
+      linksdentroareas(des, web, wb, key,num, tit)
    if numdesatu == []:
       print("----[Todos os elementos estao atualizados]---- ")
       logging.warning(str(parse(datetime.now().isoformat(timespec='seconds'))) + ': ----[Todos os elementos estao atualizados]----')
@@ -138,7 +139,14 @@ def criarworkpath(path):
    ws.title = 'Table'
    return wb, ws
 
-def linksdentroareas(desatualizados, web, wb,nome,numdesatu):
+def pub(data):
+   switch = {'Janeiro': 1,'Fevereiro': 2,'Março': 3,'Abril': 4,'Maio': 5,'Junho': 6,'Julho': 7,'Agosto': 8,'Setembro': 9,'Outubro': 10,'Novembro': 11,'Dezembro': 12}
+   dia = int(data[:2])
+   mes = switch.get(data[2:-4].replace("de","").replace(" ",""))
+   ano = int(data[-4:])
+   return datetime(ano,mes,dia).date()
+
+def linksdentroareas(desatualizados, web, wb,nome,numdesatu, tit):
    try:
       ws = wb[nome]
       dim_holder = DimensionHolder(worksheet=ws)
@@ -161,15 +169,9 @@ def linksdentroareas(desatualizados, web, wb,nome,numdesatu):
       todosdatpag = []
       todoslinkpag = []
       todospubpag = []   
-      web.get(element[1])
       print('----[Atualizado]---- ' + str(porcentagem(j,len(desatualizados)))+"%          ", end="\r", flush=True)
       if numdesatu[j]:
          page = 1#math.ceil((numdesatu[j]/50))
-      else:   
-         try:
-            page = int(web.find_element_by_xpath('//*[@id="ACERVO"]/ul/li[3]').text[12:])
-         except:
-            page = 1
       for pagina in range(1,page+1): 
          print('----[Porcentagem '+ element[0] +']---- ' + str(porcentagem(pagina,page))+"%          ", end="\r", flush=True)
          linkpagina = element[1][:-11]+str(pagina)+"&PARM=&LBL="
@@ -198,7 +200,8 @@ def linksdentroareas(desatualizados, web, wb,nome,numdesatu):
                except:
                   todosdecpag.append(titulodentro[i])
                todosdatpag.append(data)
-               todospubpag.append(datapubdentro[i].split(',')[1])
+               datapub = pub(datapubdentro[i].split(',')[1][1:])
+               todospubpag.append(datapub)
                try:
                   todosdescpag.append(ILLEGAL_CHARACTERS_RE.sub(r'',descdentro[i]))
                except:
@@ -206,15 +209,19 @@ def linksdentroareas(desatualizados, web, wb,nome,numdesatu):
                todoslinkpag.append(link)
             else:
                break
-      gerarxls(todosdecpag,todosdatpag,todospubpag,todosdescpag,todoslinkpag, element[0], ws)  
+      gerarxls(todosdecpag,todosdatpag,todospubpag,todosdescpag,todoslinkpag, element[0], ws, tit)  
 
-def gerarxls(todosdecpag,todosdatpag,todospubpag,todosdescpag,todoslinkpag, titulo,ws):
+def gerarxls(todosdecpag,todosdatpag,todospubpag,todosdescpag,todoslinkpag, titulo,ws, tit):
    coluna = (3)
    try:
       increment = int(ws.cell(1,coluna+1).value)
    except:
-      increment = 0
-   ws.cell(1+increment,coluna,titulo)
+      increment = 1 #para ter a linha do cabeçalho
+   
+   if tit == None:
+      ws.cell(1+increment,coluna,titulo) #Titulo 
+
+
    for i in reversed(range(len(todosdecpag))):
       if ws.cell(increment+1,coluna).value == titulo:
          space = 2
@@ -226,7 +233,7 @@ def gerarxls(todosdecpag,todosdatpag,todospubpag,todosdescpag,todoslinkpag, titu
       ws.cell(linha,coluna,todospubpag[i])
       ws.cell(linha,coluna+1,todosdescpag[i])
       ws.cell(linha,coluna+2,todoslinkpag[i])
-      ws.cell(1,coluna+1, linha)
+      ws.cell(2,coluna+1, linha)
 
 if __name__ == '__main__':
    hoje = date.today().strftime("%d/%m/%Y")
