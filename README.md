@@ -5,8 +5,8 @@
 
 
 # Criadores
-	(Melhorias, otimização e busca inteligente)          (Criador do script base)
-                    João Rock                                Leandro Rodrigues
+	(Criação ,melhorias, otimização e busca inteligente)
+                    João Rock                       
 
 ## Versão 1.0
 
